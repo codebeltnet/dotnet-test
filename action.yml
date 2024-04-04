@@ -1,0 +1,65 @@
+name: .NET Test
+description: An opinionated action that utilizes the test runner in the .NET SDK. Default is to test all C# projects located in the test folder. Uploaded artifacts will follow the convention {coverageReportFolderName}-{configuration}-{os} and {testResultsFolderName}-{configuration}-{os}.
+inputs:
+  projects:
+    description: Optional path to the project(s) file to test. Pass empty to test whole solution. 
+    required: true
+    default: 'test/**/*.csproj'
+  configuration:
+    description: Defines the build configuration. Default is Release (to reduce risk of surprises when transitioning to Production).
+    required: true
+    default: 'Release'
+  level:
+    description: Sets the verbosity level of the command. Allowed values are q[uiet], m[inimal], n[ormal], d[etailed], and diag[nostic]. The default is quiet.
+    required: true
+    default: 'quiet'
+  coverageReportFolderName:
+    description: The name of the folder where the coverage report will be written. Default is Coverage.
+    required: false
+    default: 'Coverage'
+  testResultsFolderName:
+    description: The name of the folder where the test results will be written. Default is TestResults.
+    required: false
+    default: 'TestResults'
+  buildSwitches:
+    description: Provides a way to fully customize the build. Default is emopty. See https://learn.microsoft.com/en-us/visualstudio/msbuild/msbuild-command-line-reference?view=vs-2022#switches for more information.
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Test
+      run: |
+        if [ ${{ inputs.projects }} == "" ]; then
+            dotnet test --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.buildSwitches }}
+        else
+            shopt -s globstar
+            for file in ${{ inputs.projects }}; do
+              dotnet test $file --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.buildSwitches }}
+              echo "Tested and written results for '$file'"
+            done
+        fi
+      shell: bash
+    - name: Use Report Generator
+      run: reportgenerator "-reports:$RUNNER_TEMP/${{ inputs.testResultsFolderName }}/**/*.opencover.xml" "-targetdir:${{ github.workspace }}/${{ inputs.coverageReportFolderName }}" "-reporttypes:Cobertura;MarkdownSummaryGithub;HTMLInline;HTMLChart"
+      shell: bash
+    - name: Write to Job Summary
+      if: success() && runner.os == 'Linux'
+      run: cat ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+      shell: bash
+    - name: Write to Job Summary
+      if: success() && runner.os == 'Windows'
+      run: Get-Content ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}/SummaryGithub.md | Add-Content $env:GITHUB_STEP_SUMMARY
+      shell: pwsh
+    - name: Upload CoverageReport
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: CoverageReport-${{ inputs.configuration }}-${{ runner.os }}
+        path: ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}
+    - name: Upload TestResults
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: TestResults-${{ inputs.configuration }}-${{ runner.os }}
+        path: ${{ runner.temp }}/${{ inputs.testResultsFolderName }}
