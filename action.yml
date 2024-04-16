@@ -63,3 +63,6 @@ runs:
       with:
         name: TestResults-${{ inputs.configuration }}-${{ runner.os }}
         path: ${{ runner.temp }}/${{ inputs.testResultsFolderName }}
+branding:
+  icon: 'umbrella'
+  color: 'blue'
