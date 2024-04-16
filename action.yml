@@ -1,5 +1,5 @@
 name: .NET Test
-description: An opinionated action that utilizes the test runner in the .NET SDK. Default is to test all C# projects located in the test folder. Uploaded artifacts will follow the convention {coverageReportFolderName}-{configuration}-{os} and {testResultsFolderName}-{configuration}-{os}.
+description: An opinionated action that utilizes the test runner in the .NET SDK.
 inputs:
   projects:
     description: Optional path to the project(s) file to test. Pass empty to test whole solution. 
