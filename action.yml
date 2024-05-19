@@ -30,7 +30,7 @@ runs:
   steps:
     - name: Test
       run: |
-        if [ ${{ inputs.projects }} == "" ]; then
+        if [ "${{ inputs.projects }}" == "" ]; then
             dotnet test --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.buildSwitches }}
         else
             shopt -s globstar
