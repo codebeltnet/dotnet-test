@@ -33,7 +33,7 @@ runs:
         if [ "${{ inputs.projects }}" == "" ]; then
             dotnet test --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.buildSwitches }}
         else
-            shopt -s globstar
+            shopt -s globstar extglob
             for file in ${{ inputs.projects }}; do
               dotnet test $file --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.buildSwitches }}
               echo "Tested and written results for '$file'"
