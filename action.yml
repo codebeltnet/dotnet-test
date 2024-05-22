@@ -55,13 +55,13 @@ runs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: CoverageReport-${{ inputs.configuration }}-${{ runner.os }}
+        name: CoverageReport-${{ hashFiles(inputs.projects) }}
         path: ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}
     - name: Upload TestResults
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: TestResults-${{ inputs.configuration }}-${{ runner.os }}
+        name: TestResults-${{ hashFiles(inputs.projects) }}
         path: ${{ runner.temp }}/${{ inputs.testResultsFolderName }}
 branding:
   icon: 'umbrella'
