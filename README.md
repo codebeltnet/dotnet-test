@@ -22,7 +22,7 @@ Supports `projects` input we learned to appreciate from [AzDO DotNetCoreCLI](htt
 To use this action in your GitHub repository, you can follow these steps:
 
 ```yaml
-uses: codebeltnet/dotnet-test@v1
+uses: codebeltnet/dotnet-test@v2
 ```
 
 ### Inputs
@@ -56,7 +56,7 @@ This action has no outputs.
 
 ```yaml
 - name: Test with Release build
-  uses: codebeltnet/dotnet-test@v1
+  uses: codebeltnet/dotnet-test@v2
   with:
     configuration: Release
 ```
@@ -159,7 +159,7 @@ jobs:
         uses: codebeltnet/dotnet-tool-install-reportgenerator@v1
 
       - name: Test with Debug build
-        uses: codebeltnet/dotnet-test@v1
+        uses: codebeltnet/dotnet-test@v2
         with:
           configuration: Debug
           buildSwitches: -p:SkipSignAssembly=true
