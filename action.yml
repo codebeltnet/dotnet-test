@@ -41,6 +41,7 @@ runs:
           ~/.nuget/packages
         key: ${{ inputs.restoreCacheKey }}
         fail-on-cache-miss: true
+        enableCrossOsArchive: true
 
     - name: Test
       run: |
@@ -75,7 +76,7 @@ runs:
       with:
         name: CoverageReport-${{ inputs.configuration }}-${{ runner.os }}-${{ hashFiles(inputs.projects) }}
         path: ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}
-        
+
     - name: Upload TestResults
       if: success()
       uses: actions/upload-artifact@v4
