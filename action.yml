@@ -25,9 +25,23 @@ inputs:
     description: Provides a way to fully customize the build. Default is emopty. See https://learn.microsoft.com/en-us/visualstudio/msbuild/msbuild-command-line-reference?view=vs-2022#switches for more information.
     required: false
     default: ''
+  restoreCacheKey:
+    description: When set, current workspace will be overwritten with the content of the restore cache. Default is empty.
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
+    - if: inputs.restoreCacheKey != ''
+      name: Restore
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ${{ github.workspace }}
+          ~/.nuget/packages
+        key: ${{ inputs.restoreCacheKey }}
+        fail-on-cache-miss: true
+
     - name: Test
       run: |
         if [ "${{ inputs.projects }}" == "" ]; then
@@ -40,23 +54,28 @@ runs:
             done
         fi
       shell: bash
+
     - name: Use Report Generator
       run: reportgenerator "-reports:$RUNNER_TEMP/${{ inputs.testResultsFolderName }}/**/*.opencover.xml" "-targetdir:${{ github.workspace }}/${{ inputs.coverageReportFolderName }}" "-reporttypes:Cobertura;MarkdownSummaryGithub;HTMLInline;HTMLChart"
       shell: bash
+
     - name: Write to Job Summary
       if: success() && runner.os == 'Linux'
       run: cat ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
       shell: bash
+
     - name: Write to Job Summary
       if: success() && runner.os == 'Windows'
       run: Get-Content ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}/SummaryGithub.md | Add-Content $env:GITHUB_STEP_SUMMARY
       shell: pwsh
+
     - name: Upload CoverageReport
       if: success()
       uses: actions/upload-artifact@v4
       with:
         name: CoverageReport-${{ inputs.configuration }}-${{ runner.os }}-${{ hashFiles(inputs.projects) }}
         path: ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}
+        
     - name: Upload TestResults
       if: success()
       uses: actions/upload-artifact@v4
