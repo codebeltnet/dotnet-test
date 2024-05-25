@@ -40,8 +40,8 @@ runs:
           ${{ github.workspace }}
           ~/.nuget/packages
         key: ${{ inputs.restoreCacheKey }}
-        fail-on-cache-miss: true
         enableCrossOsArchive: true
+        fail-on-cache-miss: true
 
     - name: Test
       run: |
