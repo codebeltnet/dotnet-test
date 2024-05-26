@@ -40,6 +40,8 @@ runs:
           ${{ github.workspace }}
           ~/.nuget/packages
         key: ${{ inputs.restoreCacheKey }}
+        restore-keys: |
+          dotnet-restore-
         enableCrossOsArchive: true
         fail-on-cache-miss: true
 
