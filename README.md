@@ -44,6 +44,8 @@ with:
   testResultsFolderName: 'TestResults'
   # Provides a way to fully customize the build. See https://learn.microsoft.com/en-us/visualstudio/msbuild/msbuild-command-line-reference?view=vs-2022#switches for more information.
   buildSwitches: ''
+  # When set, current workspace will be overwritten with the content of the restore cache and NuGet packages will be restored.
+  restoreCacheKey: ''
 ```
 
 ### Outputs
