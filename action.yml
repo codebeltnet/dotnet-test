@@ -45,6 +45,13 @@ runs:
         enableCrossOsArchive: true
         fail-on-cache-miss: true
 
+    - if: inputs.restoreCacheKey != ''
+      name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: '*-${{ inputs.configuration }}'
+        merge-multiple: true
+
     - name: Test
       run: |
         if [ "${{ inputs.projects }}" == "" ]; then
