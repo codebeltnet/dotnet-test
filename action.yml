@@ -41,7 +41,8 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: |
-          ${{ github.workspace }}
+          ${{ github.workspace }}/src
+          ${{ github.workspace }}/test
           ~/.nuget/packages
         key: ${{ inputs.restoreCacheKey }}
         restore-keys: |
