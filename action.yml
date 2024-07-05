@@ -29,10 +29,6 @@ inputs:
     description: When set, current workspace will be overwritten with the content of the restore cache. Default is empty.
     required: false
     default: ''
-  downloadBuildArtifact:
-    description: Download the build artifact. Default is to not download.
-    required: false
-    default: 'false'
 runs:
   using: composite
   steps:
@@ -41,8 +37,8 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: |
-          ${{ github.workspace }}/src
-          ${{ github.workspace }}/test
+          ${{ github.workspace }}
+          !${{ github.workspace }}/.git
           ~/.nuget/packages
         key: ${{ inputs.restoreCacheKey }}
         restore-keys: |
@@ -50,8 +46,7 @@ runs:
         enableCrossOsArchive: true
         fail-on-cache-miss: true
 
-    - if: inputs.downloadBuildArtifact == 'true'
-      name: Download all artifacts
+    - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
         pattern: '*-${{ inputs.configuration }}'
