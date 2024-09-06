@@ -85,6 +85,7 @@ runs:
       with:
         name: CoverageReport-${{ inputs.configuration }}-${{ runner.os }}-${{ hashFiles(inputs.projects) }}
         path: ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}
+        include-hidden-files: true
 
     - name: Upload TestResults
       if: success()
@@ -92,6 +93,7 @@ runs:
       with:
         name: TestResults-${{ inputs.configuration }}-${{ runner.os }}-${{ hashFiles(inputs.projects) }}
         path: ${{ runner.temp }}/${{ inputs.testResultsFolderName }}
+        include-hidden-files: true
 branding:
   icon: 'umbrella'
   color: 'blue'
