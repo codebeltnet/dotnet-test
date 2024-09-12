@@ -48,6 +48,8 @@ with:
   restoreCacheKey: ''
   # The time to wait for a test to complete before collecting a dump.
   blameHangTimeout: '10m'
+  # The type of dump to collect when a test hangs.
+  blameHangDumpType: 'mini'
 ```
 
 ### Outputs

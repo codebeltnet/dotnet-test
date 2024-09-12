@@ -33,6 +33,10 @@ inputs:
     description: The time to wait for a test to complete before collecting a dump. Default is 10 minutes.
     required: false
     default: '10m'
+  blameHangDumpType:
+    description: The type of dump to collect when a test hangs. Default is mini.
+    required: false
+    default: 'mini'
 runs:
   using: composite
   steps:
@@ -59,11 +63,11 @@ runs:
     - name: Test
       run: |
         if [ "${{ inputs.projects }}" == "" ]; then
-            dotnet test --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blameHangTimeout }} --blame-hang-dump-type full -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.buildSwitches }}
+            dotnet test --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blameHangTimeout }} --blame-hang-dump-type ${{ inputs.blameHangDumpType }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.buildSwitches }}
         else
             shopt -s globstar extglob
             for file in ${{ inputs.projects }}; do
-              dotnet test $file --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blameHangTimeout }} --blame-hang-dump-type full -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.buildSwitches }}
+              dotnet test $file --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blameHangTimeout }} --blame-hang-dump-type ${{ inputs.blameHangDumpType }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.buildSwitches }}
               echo "Tested and written results for '$file'"
             done
         fi
