@@ -46,6 +46,8 @@ with:
   buildSwitches: ''
   # When set, current workspace will be overwritten with the content of the restore cache and NuGet packages will be restored.
   restoreCacheKey: ''
+  # The time to wait for a test to complete before collecting a dump.
+  blameHangTimeout: '10m'
 ```
 
 ### Outputs
