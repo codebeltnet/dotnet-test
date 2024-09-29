@@ -50,6 +50,8 @@ with:
   blameHangTimeout: '10m'
   # The type of dump to collect when a test hangs.
   blameHangDumpType: 'mini'
+  # Additional arguments to pass to the test runner. Default is empty.
+  testArguments: ''
 ```
 
 ### Outputs

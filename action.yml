@@ -37,6 +37,10 @@ inputs:
     description: The type of dump to collect when a test hangs. Default is mini.
     required: false
     default: 'mini'
+  testArguments:
+    description: Additional arguments to pass to the test runner. Default is empty.
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -76,11 +80,11 @@ runs:
     - name: Test
       run: |
         if [ "${{ inputs.projects }}" == "" ]; then
-            dotnet test --no-build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blameHangTimeout }} --blame-hang-dump-type ${{ inputs.blameHangDumpType }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true
+            dotnet test --no-build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blameHangTimeout }} --blame-hang-dump-type ${{ inputs.blameHangDumpType }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.testArguments }}
         else
             shopt -s globstar extglob
             for file in ${{ inputs.projects }}; do
-              dotnet test $file --no-build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blameHangTimeout }} --blame-hang-dump-type ${{ inputs.blameHangDumpType }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true
+              dotnet test $file --no-build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blameHangTimeout }} --blame-hang-dump-type ${{ inputs.blameHangDumpType }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.testArguments }}
               echo "Tested and written results for '$file'"
             done
         fi
