@@ -1,77 +1,49 @@
-name: .NET Test
+name: .NET Test from Codebelt
 description: An opinionated action that utilizes the test runner in the .NET SDK.
 inputs:
   projects:
-    description: Optional path to the project(s) file to test. Pass empty to test whole solution. 
+    description: Optional path to the project(s) file to test. Supports globbing. Default is an empty string.
     required: true
-    default: 'test/**/*.csproj'
+    default: ''
   configuration:
     description: Defines the build configuration. Default is Release (to reduce risk of surprises when transitioning to Production).
     required: true
     default: 'Release'
-  level:
+  verbosity-level:
     description: Sets the verbosity level of the command. Allowed values are q[uiet], m[inimal], n[ormal], d[etailed], and diag[nostic]. The default is quiet.
     required: true
     default: 'quiet'
-  coverageReportFolderName:
-    description: The name of the folder where the coverage report will be written. Default is Coverage.
-    required: false
-    default: 'Coverage'
-  testResultsFolderName:
+  test-results-folder-name:
     description: The name of the folder where the test results will be written. Default is TestResults.
     required: false
     default: 'TestResults'
-  buildSwitches:
+  build-switches:
     description: Provides a way to fully customize the build. Default is emopty. See https://learn.microsoft.com/en-us/visualstudio/msbuild/msbuild-command-line-reference?view=vs-2022#switches for more information.
     required: false
     default: ''
-  restoreCacheKey:
-    description: When set, current workspace will be overwritten with the content of the restore cache. Default is empty.
-    required: false
-    default: ''
-  blameHangTimeout:
+  blame-hang-timeout:
     description: The time to wait for a test to complete before collecting a dump. Default is 10 minutes.
     required: false
     default: '10m'
-  blameHangDumpType:
+  blame-hang-dump-type:
     description: The type of dump to collect when a test hangs. Default is mini.
     required: false
     default: 'mini'
-  testArguments:
+  test-arguments:
     description: Additional arguments to pass to the test runner. Default is empty.
     required: false
     default: ''
 runs:
   using: composite
   steps:
-    - if: inputs.restoreCacheKey != ''
-      name: Restore
-      uses: actions/cache/restore@v4
-      with:
-        path: |
-          ${{ github.workspace }}
-          !${{ github.workspace }}/.git
-          ~/.nuget/packages
-        key: ${{ inputs.restoreCacheKey }}
-        restore-keys: |
-          dotnet-restore-
-        enableCrossOsArchive: true
-        fail-on-cache-miss: true
-
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        pattern: '*-${{ inputs.configuration }}'
-        merge-multiple: true
-
     - name: Build
       run: |
         if [ "${{ inputs.projects }}" == "" ]; then
-            dotnet build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} ${{ inputs.buildSwitches }}
+            dotnet build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} ${{ inputs.build-switches }}
         else
             shopt -s globstar extglob
             for file in ${{ inputs.projects }}; do
-              dotnet build $file --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} ${{ inputs.buildSwitches }}
+              dotnet build $file --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} ${{ inputs.build-switches }}
               echo "Builded '$file'"
             done
         fi
@@ -80,45 +52,15 @@ runs:
     - name: Test
       run: |
         if [ "${{ inputs.projects }}" == "" ]; then
-            dotnet test --no-build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blameHangTimeout }} --blame-hang-dump-type ${{ inputs.blameHangDumpType }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.testArguments }}
+            dotnet test --no-build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.test-results-folder-name }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blame-hang-timeout }} --blame-hang-dump-type ${{ inputs.blame-hang-dump-type }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.test-arguments }}
         else
             shopt -s globstar extglob
             for file in ${{ inputs.projects }}; do
-              dotnet test $file --no-build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.testResultsFolderName }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blameHangTimeout }} --blame-hang-dump-type ${{ inputs.blameHangDumpType }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.testArguments }}
+              dotnet test $file --no-build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.test-results-folder-name }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blame-hang-timeout }} --blame-hang-dump-type ${{ inputs.blame-hang-dump-type }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.test-arguments }}
               echo "Tested and written results for '$file'"
             done
         fi
       shell: bash
-
-    - name: Use Report Generator
-      run: reportgenerator "-reports:$RUNNER_TEMP/${{ inputs.testResultsFolderName }}/**/*.opencover.xml" "-targetdir:${{ github.workspace }}/${{ inputs.coverageReportFolderName }}" "-reporttypes:Cobertura;MarkdownSummaryGithub;HTMLInline;HTMLChart"
-      shell: bash
-
-    - name: Write to Job Summary
-      if: success() && runner.os == 'Linux'
-      run: cat ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
-      shell: bash
-
-    - name: Write to Job Summary
-      if: success() && runner.os == 'Windows'
-      run: Get-Content ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}/SummaryGithub.md | Add-Content $env:GITHUB_STEP_SUMMARY
-      shell: pwsh
-
-    - name: Upload CoverageReport
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: CoverageReport-${{ inputs.configuration }}-${{ runner.os }}-${{ hashFiles(inputs.projects) }}
-        path: ${{ github.workspace }}/${{ inputs.coverageReportFolderName }}
-        include-hidden-files: true
-
-    - name: Upload TestResults
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: TestResults-${{ inputs.configuration }}-${{ runner.os }}-${{ hashFiles(inputs.projects) }}
-        path: ${{ runner.temp }}/${{ inputs.testResultsFolderName }}
-        include-hidden-files: true
 branding:
   icon: 'umbrella'
   color: 'blue'
