@@ -22,7 +22,7 @@ Supports `projects` input we learned to appreciate from [AzDO DotNetCoreCLI](htt
 To use this action in your GitHub repository, you can follow these steps:
 
 ```yaml
-uses: codebeltnet/dotnet-test@v2
+uses: codebeltnet/dotnet-test@v4
 ```
 
 ### Inputs
@@ -60,7 +60,7 @@ This action has no outputs.
 
 ```yaml
 - name: Test with Release build
-  uses: codebeltnet/dotnet-test@v2
+  uses: codebeltnet/dotnet-test@v4
   with:
     configuration: Release
 ```
