@@ -46,6 +46,10 @@ with:
   blame-hang-timeout: '10m'
   # The type of dump to collect when a test hangs.
   blame-hang-dump-type: 'mini'
+  # Whether to build the project(s) before testing. Default is false.
+  build: 'false'
+  # Whether to restore the project(s) before testing. Default is false.
+  restore: 'false'
   # Additional arguments to pass to the test runner. Default is empty.
   test-arguments: ''
 ```

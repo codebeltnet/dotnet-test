@@ -29,6 +29,14 @@ inputs:
     description: The type of dump to collect when a test hangs. Default is mini.
     required: false
     default: 'mini'
+  build:
+    description: Whether to build the project(s) before testing. Default is false.
+    required: false
+    default: 'false'
+  restore:
+    description: Whether to restore the project(s) before testing. Default is false.
+    required: false
+    default: 'false'
   test-arguments:
     description: Additional arguments to pass to the test runner. Default is empty.
     required: false
@@ -36,27 +44,21 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Build
-      run: |
-        if [ "${{ inputs.projects }}" == "" ]; then
-            dotnet build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} ${{ inputs.build-switches }}
-        else
-            shopt -s globstar extglob
-            for file in ${{ inputs.projects }}; do
-              dotnet build $file --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} ${{ inputs.build-switches }}
-              echo "Builded '$file'"
-            done
-        fi
-      shell: bash
-
     - name: Test
       run: |
+        build-restore-args=""
+        if [[ "${{ inputs.build }}" == "false" && "${{ inputs.restore }}" == "false" ]]; then
+          build-restore-args="--no-build"
+        elif [[ "${{ inputs.build }}" == "true" && "${{ inputs.restore }}" == "false" ]]; then
+          build-restore-args="--no-restore"
+        fi
+
         if [ "${{ inputs.projects }}" == "" ]; then
-            dotnet test --no-build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.test-results-folder-name }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blame-hang-timeout }} --blame-hang-dump-type ${{ inputs.blame-hang-dump-type }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.test-arguments }}
+            dotnet test $build-restore-args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.test-results-folder-name }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blame-hang-timeout }} --blame-hang-dump-type ${{ inputs.blame-hang-dump-type }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.test-arguments }}
         else
             shopt -s globstar extglob
             for file in ${{ inputs.projects }}; do
-              dotnet test $file --no-build --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.test-results-folder-name }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blame-hang-timeout }} --blame-hang-dump-type ${{ inputs.blame-hang-dump-type }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.test-arguments }}
+              dotnet test $file $build-restore-args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.test-results-folder-name }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blame-hang-timeout }} --blame-hang-dump-type ${{ inputs.blame-hang-dump-type }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.test-arguments }}
               echo "Tested and written results for '$file'"
             done
         fi
