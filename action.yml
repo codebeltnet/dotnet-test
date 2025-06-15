@@ -56,11 +56,11 @@ runs:
         echo "Using build/restore args: $build_restore_args"
 
         if [ "${{ inputs.projects }}" == "" ]; then
-            dotnet test $build_restore_args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.test-results-folder-name }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blame-hang-timeout }} --blame-hang-dump-type ${{ inputs.blame-hang-dump-type }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.test-arguments }}
+            dotnet test $build_restore_args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.test-results-folder-name }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blame-hang-timeout }} --blame-hang-dump-type ${{ inputs.blame-hang-dump-type }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true  ${{ inputs.build-switches }} ${{ inputs.test-arguments }}
         else
             shopt -s globstar extglob
             for file in ${{ inputs.projects }}; do
-              dotnet test $file $build_restore_args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.test-results-folder-name }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blame-hang-timeout }} --blame-hang-dump-type ${{ inputs.blame-hang-dump-type }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.test-arguments }}
+              dotnet test $file $build_restore_args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --logger trx --results-directory $RUNNER_TEMP/${{ inputs.test-results-folder-name }} --collect:"XPlat Code Coverage;Format=opencover" --blame-hang-timeout ${{ inputs.blame-hang-timeout }} --blame-hang-dump-type ${{ inputs.blame-hang-dump-type }} -p:CoverletOutputFormat=opencover -p:UseSourceLink=true ${{ inputs.build-switches }} ${{ inputs.test-arguments }}
               echo "Tested and written results for '$file'"
             done
         fi
