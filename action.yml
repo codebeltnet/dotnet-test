@@ -49,7 +49,7 @@ runs:
         build_restore_args=""
         if [[ "${{ inputs.build }}" == "false" && "${{ inputs.restore }}" == "false" ]]; then
           build_restore_args="--no-build"
-        elif [[ "${{ inputs.build }}" == "true" && "${{ inputs.restore }}" == "false" ]]; then
+        elif [[ "${{ inputs.build }}" == "false" && "${{ inputs.restore }}" == "true" ]]; then
           build_restore_args="--no-restore"
         fi
 
