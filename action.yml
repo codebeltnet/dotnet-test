@@ -47,11 +47,13 @@ runs:
     - name: Test
       run: |
         build_restore_args=""
-        if [[ "${{ inputs.build }}" == "false" && "${{ inputs.restore }}" == "false" ]]; then
-          build_restore_args="--no-build"
-        elif [[ "${{ inputs.build }}" == "false" && "${{ inputs.restore }}" == "true" ]]; then
-          build_restore_args="--no-restore"
+        if [[ "${{ inputs.restore }}" == "false" ]]; then
+          build_restore_args="$build_restore_args --no-restore"
         fi
+        if [[ "${{ inputs.build }}" == "false" ]]; then
+          build_restore_args="$build_restore_args --no-build"
+        fi
+        build_restore_args="${build_restore_args#" "}" # Trim leading space
 
         echo "Using build/restore args: $build_restore_args"
 
