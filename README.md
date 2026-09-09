@@ -58,6 +58,28 @@ with:
 
 This action has no outputs.
 
+### Test runner selection
+
+The action reads `global.json` in the repository root. When `test.runner` is
+`Microsoft.Testing.Platform`, it uses the .NET 10+ MTP test experience. Otherwise,
+it uses the existing VSTest arguments. An invalid `global.json` fails the action.
+
+MTP runs produce xUnit TRX reports and Cobertura coverage. Test projects must
+provide `--report-xunit-trx` support and reference
+`Microsoft.Testing.Extensions.CodeCoverage` for native coverage.
+
+With `projects` specified, the action runs `dotnet test --project` and honors the
+`build`, `restore`, and `build-switches` inputs. With `projects` empty, MTP runs
+already-built `*Tests.dll` modules under `bin/<configuration>/net*.0/` and
+`*Tests.exe` modules under `bin/<configuration>/net4*/`. Build and restore these
+modules before calling the action, as the reusable workflow does. Modern .NET
+modules collect coverage; .NET Framework modules produce test reports without
+native coverage. No matching modules is an error.
+
+`test-arguments` are passed to the selected runner. The `blame-hang-timeout` and
+`blame-hang-dump-type` inputs apply to VSTest only. Reports are written under
+`runner.temp/<test-results-folder-name>`; callers own report publishing.
+
 ## Examples
 
 ### Test all projects in the test folder
