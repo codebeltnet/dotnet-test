@@ -56,7 +56,8 @@ with:
 
 ### Outputs
 
-This action has no outputs.
+- `runner`: `vstest` or `mtp`, selected from the repository root `global.json`.
+- `coverage-expected`: `true` when the run included a target framework expected to produce coverage; otherwise `false`.
 
 ### Test runner selection
 
@@ -64,21 +65,42 @@ The action reads `global.json` in the repository root. When `test.runner` is
 `Microsoft.Testing.Platform`, it uses the .NET 10+ MTP test experience. Otherwise,
 it uses the existing VSTest arguments. An invalid `global.json` fails the action.
 
-MTP runs produce xUnit TRX reports and Cobertura coverage. Test projects must
-provide `--report-xunit-trx` support and reference
-`Microsoft.Testing.Extensions.CodeCoverage` for native coverage.
+The VSTest path retains its existing `coverlet.collector` OpenCover invocation,
+including `--collect:"XPlat Code Coverage;Format=opencover"`. MTP runs produce
+xUnit TRX reports and Coverlet OpenCover coverage. MTP test projects must provide
+`--report-xunit-trx` support and reference `coverlet.MTP` for supported modern
+.NET targets (Coverlet MTP supports .NET Core 8.0 and newer) and `net48`
+(verified with `coverlet.MTP` 10.0.1). They must also
+reference `Microsoft.Testing.Extensions.HangDump` 2.3.0 or newer for diagnostics.
+The MTP coverage arguments are
+`--coverlet --coverlet-output-format opencover`; the legacy hang inputs are
+forwarded as `--hangdump-timeout` and `--hangdump-type`. .NET Framework runs use
+`--hangdump-type-if-supported` so an unsupported `Triage` request falls back to
+`Mini`. MTP HangDump uses a test-host inactivity timeout, so its hang detection
+can differ from VSTest's blame behavior.
 
-With `projects` specified, the action runs `dotnet test --project` and honors the
-`build`, `restore`, and `build-switches` inputs. With `projects` empty, MTP runs
+With `projects` specified, the action evaluates each project's target frameworks
+and runs `dotnet test --project --framework` for each one. It honors the `build`,
+`restore`, and `build-switches` inputs on every target. Coverlet coverage is
+requested for supported modern .NET targets and `net48`; other .NET Framework
+targets still run and produce TRX without Coverlet coverage. With `projects` empty, MTP runs
 already-built `*Tests.dll` modules under `bin/<configuration>/net*.0/` and
-`*Tests.exe` modules under `bin/<configuration>/net4*/`. Build and restore these
-modules before calling the action, as the reusable workflow does. Modern .NET
-modules collect coverage; .NET Framework modules produce test reports without
-native coverage. No matching modules is an error.
+`*Tests.exe` modules under `bin/<configuration>/net4*/`. That module-discovery
+path does not apply `build`, `restore`, or `build-switches`; callers must prepare
+the modules first, as the reusable workflow does. Supported .NET Core 8.0+
+modules collect OpenCover; older modern .NET modules run test-only. `net48`
+modules collect OpenCover with Coverlet.MTP 10.0.1, and other .NET Framework
+modules remain test-only. No matching modules is an error.
 
-`test-arguments` are passed to the selected runner. The `blame-hang-timeout` and
-`blame-hang-dump-type` inputs apply to VSTest only. Reports are written under
-`runner.temp/<test-results-folder-name>`; callers own report publishing.
+For MTP, `test-arguments` are forwarded after the `dotnet test` `--` separator.
+For VSTest, the existing argument forwarding is unchanged. All results are
+written under `runner.temp/<test-results-folder-name>`; callers own report
+publishing.
+
+Run the deterministic runner and argument contract checks with
+`pwsh -NoProfile -File tests/Test-ActionContract.ps1`. Run the VSTest collector
+smoke test with `pwsh -NoProfile -File tests/Test-VSTestCompatibility.ps1`; it
+restores a temporary test project and checks for TRX and non-empty OpenCover.
 
 ## Examples
 

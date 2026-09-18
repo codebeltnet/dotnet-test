@@ -41,6 +41,13 @@ inputs:
     description: Additional arguments to pass to the test runner. Default is empty.
     required: false
     default: ''
+outputs:
+  runner:
+    description: The test runner selected from the repository root global.json.
+    value: ${{ steps.detect-mtp.outputs.use-mtp == 'true' && 'mtp' || 'vstest' }}
+  coverage-expected:
+    description: Whether this run included a target framework expected to produce coverage.
+    value: ${{ steps.detect-mtp.outputs.use-mtp == 'true' && steps.test-mtp.outputs.coverage-expected || steps.test-vstest.outputs.coverage-expected }}
 runs:
   using: composite
   steps:
@@ -66,7 +73,9 @@ runs:
 
     - name: Test
       if: steps.detect-mtp.outputs.use-mtp != 'true'
+      id: test-vstest
       run: |
+        echo "coverage-expected=true" >> "$GITHUB_OUTPUT"
         build_restore_args=""
         if [[ "${{ inputs.restore }}" == "false" ]]; then
           build_restore_args="$build_restore_args --no-restore"
@@ -88,8 +97,9 @@ runs:
             done
         fi
       shell: bash
-    - if: steps.detect-mtp.outputs.use-mtp == 'true'
-      name: Test with Microsoft.Testing.Platform
+    - name: Test with Microsoft.Testing.Platform
+      id: test-mtp
+      if: steps.detect-mtp.outputs.use-mtp == 'true'
       shell: bash
       run: |
         set -euo pipefail
@@ -108,24 +118,78 @@ runs:
 
         echo "Using build/restore args: $build_restore_args"
 
+        is_mtp_coverage_supported_tfm() {
+          local target_framework="$1"
+          if [[ "$target_framework" == "net48" ]]; then
+            return 0
+          fi
+          [[ "$target_framework" =~ ^net([0-9]+)\.[0-9]+(-.*)?$ ]] && (( BASH_REMATCH[1] >= 8 ))
+        }
+
         if [ "${{ inputs.projects }}" == "" ]; then
+            echo "Using already-built Microsoft.Testing.Platform test modules. Build, restore, and build-switches are not applied in this module-discovery path."
             # Apple ships Bash 3.2, which does not support globstar. Use find
-            # only for presence checks and let MTP evaluate the test-module
-            # glob expression below.
+            # to discover modules and give each one its own results directory
+            # so Coverlet versions with fixed filenames cannot overwrite output.
             modern_module=$(find . -type f -path "*/bin/${{ inputs.configuration }}/net*.0/*Tests.dll" -print -quit)
-            framework_module=$(find . -type f -path "*/bin/${{ inputs.configuration }}/net4*/*Tests.exe" -print -quit)
+            net48_module=$(find . -type f -path "*/bin/${{ inputs.configuration }}/net48/*Tests.exe" -print -quit)
+            other_framework_module=$(find . -type f -path "*/bin/${{ inputs.configuration }}/net4*/*Tests.exe" ! -path "*/bin/${{ inputs.configuration }}/net48/*" -print -quit)
             found_modules=false
+            coverage_expected=false
+
+            if [ -n "$net48_module" ]; then
+              coverage_expected=true
+            fi
+            while IFS= read -r -d '' module; do
+              module_framework=$(basename "$(dirname "$module")")
+              if is_mtp_coverage_supported_tfm "$module_framework"; then
+                coverage_expected=true
+              fi
+            done < <(find . -type f -path "*/bin/${{ inputs.configuration }}/net*.0/*Tests.dll" -print0)
+
+            echo "coverage-expected=$coverage_expected" >> "$GITHUB_OUTPUT"
 
             if [ -n "$modern_module" ]; then
               found_modules=true
-              echo "Running modern test modules with native code coverage."
-              dotnet test --test-modules "**/bin/**/${{ inputs.configuration }}/net*.0/*Tests.dll" --max-parallel-test-modules 1 --verbosity ${{ inputs.verbosity-level }} --results-directory "$results_directory" --report-xunit-trx --coverage --coverage-output-format cobertura ${{ inputs.test-arguments }}
+              echo "Running pre-built .NET test modules; Coverlet OpenCover is enabled for supported targets."
+              while IFS= read -r -d '' module; do
+                module_framework=$(basename "$(dirname "$module")")
+                module_name=$(basename "$module" .dll)
+                module_results_directory="$results_directory/$module_framework/$module_name"
+                mkdir -p "$module_results_directory"
+                if is_mtp_coverage_supported_tfm "$module_framework"; then
+                  echo "Testing '$module' with Coverlet OpenCover coverage in '$module_results_directory'."
+                  dotnet test --test-modules "$module" --max-parallel-test-modules 1 --verbosity ${{ inputs.verbosity-level }} --results-directory "$module_results_directory" -- --report-xunit-trx --coverlet --coverlet-output-format opencover --hangdump --hangdump-timeout ${{ inputs.blame-hang-timeout }} --hangdump-type ${{ inputs.blame-hang-dump-type }} ${{ inputs.test-arguments }}
+                else
+                  echo "Testing '$module' without Coverlet coverage in '$module_results_directory'."
+                  dotnet test --test-modules "$module" --max-parallel-test-modules 1 --verbosity ${{ inputs.verbosity-level }} --results-directory "$module_results_directory" -- --report-xunit-trx --hangdump --hangdump-timeout ${{ inputs.blame-hang-timeout }} --hangdump-type ${{ inputs.blame-hang-dump-type }} ${{ inputs.test-arguments }}
+                fi
+              done < <(find . -type f -path "*/bin/${{ inputs.configuration }}/net*.0/*Tests.dll" -print0)
             fi
 
-            if [ -n "$framework_module" ]; then
+            if [ -n "$net48_module" ]; then
               found_modules=true
-              echo "Running .NET Framework test modules without native code coverage."
-              dotnet test --test-modules "**/bin/**/${{ inputs.configuration }}/net4*/*Tests.exe" --max-parallel-test-modules 1 --verbosity ${{ inputs.verbosity-level }} --results-directory "$results_directory" --report-xunit-trx ${{ inputs.test-arguments }}
+              echo "Running net48 test modules with Coverlet OpenCover coverage."
+              while IFS= read -r -d '' module; do
+                module_name=$(basename "$module" .exe)
+                module_results_directory="$results_directory/net48/$module_name"
+                mkdir -p "$module_results_directory"
+                echo "Testing '$module' with results in '$module_results_directory'."
+                dotnet test --test-modules "$module" --max-parallel-test-modules 1 --verbosity ${{ inputs.verbosity-level }} --results-directory "$module_results_directory" -- --report-xunit-trx --coverlet --coverlet-output-format opencover --hangdump --hangdump-timeout ${{ inputs.blame-hang-timeout }} --hangdump-type-if-supported ${{ inputs.blame-hang-dump-type }} ${{ inputs.test-arguments }}
+              done < <(find . -type f -path "*/bin/${{ inputs.configuration }}/net48/*Tests.exe" -print0)
+            fi
+
+            if [ -n "$other_framework_module" ]; then
+              found_modules=true
+              echo "Running other .NET Framework test modules without Coverlet coverage."
+              while IFS= read -r -d '' module; do
+                module_framework=$(basename "$(dirname "$module")")
+                module_name=$(basename "$module" .exe)
+                module_results_directory="$results_directory/$module_framework/$module_name"
+                mkdir -p "$module_results_directory"
+                echo "Testing '$module' without Coverlet coverage."
+                dotnet test --test-modules "$module" --max-parallel-test-modules 1 --verbosity ${{ inputs.verbosity-level }} --results-directory "$module_results_directory" -- --report-xunit-trx --hangdump --hangdump-timeout ${{ inputs.blame-hang-timeout }} --hangdump-type-if-supported ${{ inputs.blame-hang-dump-type }} ${{ inputs.test-arguments }}
+              done < <(find . -type f -path "*/bin/${{ inputs.configuration }}/net4*/*Tests.exe" ! -path "*/bin/${{ inputs.configuration }}/net48/*" -print0)
             fi
 
             if [ "$found_modules" != true ]; then
@@ -133,12 +197,60 @@ runs:
               exit 1
             fi
         else
-            # Keep direct project paths working on Apple Bash 3.2. On Bash
-            # 4+, the existing recursive-glob behavior remains enabled.
-            shopt -s globstar extglob 2>/dev/null || true
+            project_files=()
+            project_frameworks=()
+            coverage_expected=false
+
             for file in ${{ inputs.projects }}; do
-              dotnet test --project "$file" $build_restore_args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --results-directory "$results_directory" --report-xunit-trx --coverage --coverage-output-format cobertura -p:UseSourceLink=true ${{ inputs.build-switches }} ${{ inputs.test-arguments }}
-              echo "Tested and written results for '$file'"
+              target_frameworks=$(dotnet msbuild "$file" -getProperty:TargetFrameworks -p:Configuration=${{ inputs.configuration }} ${{ inputs.build-switches }})
+              if [ -z "$target_frameworks" ]; then
+                target_frameworks=$(dotnet msbuild "$file" -getProperty:TargetFramework -p:Configuration=${{ inputs.configuration }} ${{ inputs.build-switches }})
+              fi
+
+              if [ -z "$target_frameworks" ]; then
+                echo "::error::Could not determine target frameworks for '$file'."
+                exit 1
+              fi
+
+              echo "Project '$file' target frameworks: $target_frameworks"
+              IFS=';' read -r -a target_framework_list <<< "$target_frameworks"
+              for target_framework in "${target_framework_list[@]}"; do
+                if [ -z "$target_framework" ]; then
+                  continue
+                fi
+
+                project_files+=("$file")
+                project_frameworks+=("$target_framework")
+                if is_mtp_coverage_supported_tfm "$target_framework"; then
+                  coverage_expected=true
+                fi
+              done
+            done
+
+            echo "coverage-expected=$coverage_expected" >> "$GITHUB_OUTPUT"
+
+            project_index=0
+            while [ "$project_index" -lt "${#project_files[@]}" ]; do
+              file="${project_files[$project_index]}"
+              target_framework="${project_frameworks[$project_index]}"
+              project_name=$(basename "$file" .csproj)
+              project_results_directory="$results_directory/$target_framework/$project_name"
+              hangdump_type_option="--hangdump-type"
+              if [[ "$target_framework" == net4* ]]; then
+                hangdump_type_option="--hangdump-type-if-supported"
+              fi
+              mkdir -p "$project_results_directory"
+
+              if is_mtp_coverage_supported_tfm "$target_framework"; then
+                echo "Testing '$file' for '$target_framework' with Coverlet OpenCover coverage."
+                dotnet test --project "$file" --framework "$target_framework" $build_restore_args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --results-directory "$project_results_directory" -p:UseSourceLink=true ${{ inputs.build-switches }} -- --report-xunit-trx --coverlet --coverlet-output-format opencover --hangdump --hangdump-timeout ${{ inputs.blame-hang-timeout }} $hangdump_type_option ${{ inputs.blame-hang-dump-type }} ${{ inputs.test-arguments }}
+              else
+                echo "Testing '$file' for '$target_framework' without Coverlet coverage."
+                dotnet test --project "$file" --framework "$target_framework" $build_restore_args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --results-directory "$project_results_directory" -p:UseSourceLink=true ${{ inputs.build-switches }} -- --report-xunit-trx --hangdump --hangdump-timeout ${{ inputs.blame-hang-timeout }} $hangdump_type_option ${{ inputs.blame-hang-dump-type }} ${{ inputs.test-arguments }}
+              fi
+
+              echo "Tested and written results for '$file' ($target_framework)"
+              project_index=$((project_index + 1))
             done
         fi
 branding:
