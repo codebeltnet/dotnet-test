@@ -126,6 +126,36 @@ runs:
           [[ "$target_framework" =~ ^net([0-9]+)\.[0-9]+(-.*)?$ ]] && (( BASH_REMATCH[1] >= 8 ))
         }
 
+        run_mtp_project_test() {
+          local file="$1"
+          local target_framework="$2"
+          local project_results_directory="$3"
+          local hangdump_type_option="$4"
+
+          if is_mtp_coverage_supported_tfm "$target_framework"; then
+            echo "Testing '$file' for '$target_framework' with Coverlet OpenCover coverage."
+            dotnet test --project "$file" --framework "$target_framework" $build_restore_args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --results-directory "$project_results_directory" -p:UseSourceLink=true ${{ inputs.build-switches }} -- --report-xunit-trx --coverlet --coverlet-output-format opencover --hangdump --hangdump-timeout ${{ inputs.blame-hang-timeout }} $hangdump_type_option ${{ inputs.blame-hang-dump-type }} ${{ inputs.test-arguments }}
+          else
+            echo "Testing '$file' for '$target_framework' without Coverlet coverage."
+            dotnet test --project "$file" --framework "$target_framework" $build_restore_args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --results-directory "$project_results_directory" -p:UseSourceLink=true ${{ inputs.build-switches }} -- --report-xunit-trx --hangdump --hangdump-timeout ${{ inputs.blame-hang-timeout }} $hangdump_type_option ${{ inputs.blame-hang-dump-type }} ${{ inputs.test-arguments }}
+          fi
+        }
+
+        print_mtp_project_test_log() {
+          local file="$1"
+          local target_framework="$2"
+          local project_results_directory="$3"
+          local log_file="$4"
+
+          if [ ! -s "$log_file" ]; then
+            return 0
+          fi
+
+          echo "----- BEGIN dotnet test log: '$file' ($target_framework) -> '$project_results_directory' -----"
+          cat "$log_file"
+          echo "----- END dotnet test log: '$file' ($target_framework) -----"
+        }
+
         if [ "${{ inputs.projects }}" == "" ]; then
             echo "Using already-built Microsoft.Testing.Platform test modules. Build, restore, and build-switches are not applied in this module-discovery path."
             # Apple ships Bash 3.2, which does not support globstar. Use find
@@ -197,6 +227,9 @@ runs:
               exit 1
             fi
         else
+            # Keep direct project paths working on Apple Bash 3.2. On Bash
+            # 4+, the existing recursive-glob behavior remains enabled.
+            shopt -s globstar extglob 2>/dev/null || true
             project_files=()
             project_frameworks=()
             coverage_expected=false
@@ -229,29 +262,90 @@ runs:
 
             echo "coverage-expected=$coverage_expected" >> "$GITHUB_OUTPUT"
 
-            project_index=0
-            while [ "$project_index" -lt "${#project_files[@]}" ]; do
-              file="${project_files[$project_index]}"
-              target_framework="${project_frameworks[$project_index]}"
-              project_name=$(basename "$file" .csproj)
-              project_results_directory="$results_directory/$target_framework/$project_name"
-              hangdump_type_option="--hangdump-type"
-              if [[ "$target_framework" == net4* ]]; then
-                hangdump_type_option="--hangdump-type-if-supported"
-              fi
-              mkdir -p "$project_results_directory"
+            run_count="${#project_files[@]}"
+            if [ "$run_count" -gt 1 ] && [[ "${{ inputs.restore }}" == "false" && "${{ inputs.build }}" == "false" ]]; then
+              echo "Running $run_count Microsoft.Testing.Platform project/target-framework invocation(s) in parallel with isolated result directories."
+              run_logs_directory="$RUNNER_TEMP/${{ inputs.test-results-folder-name }}-mtp-project-logs"
+              mkdir -p "$run_logs_directory"
+              run_pids=()
+              run_files=()
+              run_frameworks=()
+              run_results_directories=()
+              run_log_files=()
 
-              if is_mtp_coverage_supported_tfm "$target_framework"; then
-                echo "Testing '$file' for '$target_framework' with Coverlet OpenCover coverage."
-                dotnet test --project "$file" --framework "$target_framework" $build_restore_args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --results-directory "$project_results_directory" -p:UseSourceLink=true ${{ inputs.build-switches }} -- --report-xunit-trx --coverlet --coverlet-output-format opencover --hangdump --hangdump-timeout ${{ inputs.blame-hang-timeout }} $hangdump_type_option ${{ inputs.blame-hang-dump-type }} ${{ inputs.test-arguments }}
-              else
-                echo "Testing '$file' for '$target_framework' without Coverlet coverage."
-                dotnet test --project "$file" --framework "$target_framework" $build_restore_args --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} --results-directory "$project_results_directory" -p:UseSourceLink=true ${{ inputs.build-switches }} -- --report-xunit-trx --hangdump --hangdump-timeout ${{ inputs.blame-hang-timeout }} $hangdump_type_option ${{ inputs.blame-hang-dump-type }} ${{ inputs.test-arguments }}
+              project_index=0
+              while [ "$project_index" -lt "$run_count" ]; do
+                file="${project_files[$project_index]}"
+                target_framework="${project_frameworks[$project_index]}"
+                project_name=$(basename "$file" .csproj)
+                project_results_directory="$results_directory/$target_framework/$project_name"
+                hangdump_type_option="--hangdump-type"
+                if [[ "$target_framework" == net4* ]]; then
+                  hangdump_type_option="--hangdump-type-if-supported"
+                fi
+                mkdir -p "$project_results_directory"
+
+                log_file="$run_logs_directory/run-$project_index.log"
+                echo "Launching test run for '$file' ($target_framework) with results in '$project_results_directory'."
+                ( run_mtp_project_test "$file" "$target_framework" "$project_results_directory" "$hangdump_type_option" ) >"$log_file" 2>&1 &
+                run_pids+=("$!")
+                run_files+=("$file")
+                run_frameworks+=("$target_framework")
+                run_results_directories+=("$project_results_directory")
+                run_log_files+=("$log_file")
+                project_index=$((project_index + 1))
+              done
+
+              overall_exit_code=0
+              project_index=0
+              while [ "$project_index" -lt "${#run_pids[@]}" ]; do
+                pid="${run_pids[$project_index]}"
+                file="${run_files[$project_index]}"
+                target_framework="${run_frameworks[$project_index]}"
+                project_results_directory="${run_results_directories[$project_index]}"
+                log_file="${run_log_files[$project_index]}"
+
+                if wait "$pid"; then
+                  print_mtp_project_test_log "$file" "$target_framework" "$project_results_directory" "$log_file"
+                  echo "Tested and written results for '$file' ($target_framework)"
+                else
+                  exit_code=$?
+                  if [ "$overall_exit_code" -eq 0 ]; then
+                    overall_exit_code=$exit_code
+                  fi
+                  print_mtp_project_test_log "$file" "$target_framework" "$project_results_directory" "$log_file"
+                  echo "::error::Test run failed for '$file' ($target_framework) with exit code $exit_code. Results directory: '$project_results_directory'."
+                fi
+
+                project_index=$((project_index + 1))
+              done
+
+              if [ "$overall_exit_code" -ne 0 ]; then
+                exit "$overall_exit_code"
+              fi
+            else
+              if [ "$run_count" -gt 1 ]; then
+                echo "Running $run_count Microsoft.Testing.Platform project/target-framework invocation(s) sequentially because build and/or restore are enabled."
               fi
 
-              echo "Tested and written results for '$file' ($target_framework)"
-              project_index=$((project_index + 1))
-            done
+              project_index=0
+              while [ "$project_index" -lt "$run_count" ]; do
+                file="${project_files[$project_index]}"
+                target_framework="${project_frameworks[$project_index]}"
+                project_name=$(basename "$file" .csproj)
+                project_results_directory="$results_directory/$target_framework/$project_name"
+                hangdump_type_option="--hangdump-type"
+                if [[ "$target_framework" == net4* ]]; then
+                  hangdump_type_option="--hangdump-type-if-supported"
+                fi
+                mkdir -p "$project_results_directory"
+
+                run_mtp_project_test "$file" "$target_framework" "$project_results_directory" "$hangdump_type_option"
+
+                echo "Tested and written results for '$file' ($target_framework)"
+                project_index=$((project_index + 1))
+              done
+            fi
         fi
 branding:
   icon: 'umbrella'
