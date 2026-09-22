@@ -373,6 +373,19 @@ foreach ($run in $parallelResult.TestRuns) {
   }
 }
 
+$preparedParallelResult = Invoke-MtpProjectScenario -Projects @{
+  'test/MultiTarget.Tests/MultiTarget.Tests.csproj' = 'net10.0;net9.0;net48'
+} -ProjectsInput 'test/MultiTarget.Tests/MultiTarget.Tests.csproj' -ExpectedParallelStarts 3 -Build 'true' -Restore 'true'
+
+if ($preparedParallelResult.ExitCode -ne 0) {
+  throw "Parallel MTP project execution must succeed after one-time build and restore. ExitCode: $($preparedParallelResult.ExitCode)`nOutput:`n$($preparedParallelResult.OutputText)"
+}
+Assert-Equal -Actual $preparedParallelResult.TestRuns.Count -Expected 3 -Message 'Build and restore must not prevent parallel framework test execution.'
+Assert-Equal -Actual $preparedParallelResult.PrepLog.Count -Expected 2 -Message 'A multi-target project must be restored and built only once before parallel framework test execution.'
+Assert-Contains -Text ([string]::Join("`n", $preparedParallelResult.PrepLog)) -Expected 'restore|MultiTarget.Tests.csproj' -Message 'The project must be restored before parallel framework test execution.'
+Assert-Contains -Text ([string]::Join("`n", $preparedParallelResult.PrepLog)) -Expected 'build|MultiTarget.Tests.csproj' -Message 'The project must be built before parallel framework test execution.'
+Assert-Contains -Text $preparedParallelResult.OutputText -Expected 'Running 3 Microsoft.Testing.Platform project/target-framework invocation(s) in parallel' -Message 'Build and restore must not force sequential framework test execution.'
+
 $failureResult = Invoke-MtpProjectScenario -Projects @{
   'test/MultiTarget.Tests/MultiTarget.Tests.csproj' = 'net9.0;net10.0;net48'
 } -ProjectsInput 'test/MultiTarget.Tests/MultiTarget.Tests.csproj' -ExpectedParallelStarts 3 -FailFramework 'net9.0' -FailExitCode 23 -FrameworkDelays @{

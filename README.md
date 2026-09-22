@@ -83,12 +83,12 @@ With `projects` specified, the action evaluates each project's target frameworks
 and keeps per-framework `dotnet test --project --framework` invocations so every
 run can write to `<results-directory>/<tfm>/<project-name>/` without TRX or
 OpenCover collisions. When more than one resolved project/target-framework run
-exists and both `build` and `restore` are `false`, those invocations are
-launched concurrently and all child processes are awaited before the action
-exits; otherwise they remain sequential so the action does not race shared build
-state. Coverlet coverage is requested for supported modern .NET targets and
-`net48`; other .NET Framework targets still run and produce TRX without
-Coverlet coverage. With `projects` empty, MTP runs
+exists, each project is restored and built at most once when requested, then the
+framework test invocations are launched concurrently and all child processes are
+awaited before the action exits. The child test runs use `--no-build --no-restore`
+to avoid racing shared preparation state. Coverlet coverage is requested for
+supported modern .NET targets and `net48`; other .NET Framework targets still run
+and produce TRX without Coverlet coverage. With `projects` empty, MTP runs
 already-built `*Tests.dll` modules under `bin/<configuration>/net*.0/` and
 `*Tests.exe` modules under `bin/<configuration>/net4*/`. That module-discovery
 path does not apply `build`, `restore`, or `build-switches`; callers must prepare

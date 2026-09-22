@@ -263,7 +263,35 @@ runs:
             echo "coverage-expected=$coverage_expected" >> "$GITHUB_OUTPUT"
 
             run_count="${#project_files[@]}"
-            if [ "$run_count" -gt 1 ] && [[ "${{ inputs.restore }}" == "false" && "${{ inputs.build }}" == "false" ]]; then
+            if [ "$run_count" -gt 1 ]; then
+              prepared_projects=()
+              project_index=0
+              while [ "$project_index" -lt "$run_count" ]; do
+                file="${project_files[$project_index]}"
+                already_prepared=false
+                for prepared_file in "${prepared_projects[@]}"; do
+                  if [ "$prepared_file" = "$file" ]; then
+                    already_prepared=true
+                    break
+                  fi
+                done
+
+                if [ "$already_prepared" = false ]; then
+                  if [[ "${{ inputs.restore }}" == "true" ]]; then
+                    echo "Restoring '$file' once before parallel framework test runs."
+                    dotnet restore "$file" ${{ inputs.build-switches }}
+                  fi
+                  if [[ "${{ inputs.build }}" == "true" ]]; then
+                    echo "Building '$file' once before parallel framework test runs."
+                    dotnet build "$file" --no-restore --configuration ${{ inputs.configuration }} --verbosity ${{ inputs.verbosity-level }} ${{ inputs.build-switches }}
+                  fi
+                  prepared_projects+=("$file")
+                fi
+
+                project_index=$((project_index + 1))
+              done
+
+              build_restore_args="--no-restore --no-build"
               echo "Running $run_count Microsoft.Testing.Platform project/target-framework invocation(s) in parallel with isolated result directories."
               run_logs_directory="$RUNNER_TEMP/${{ inputs.test-results-folder-name }}-mtp-project-logs"
               mkdir -p "$run_logs_directory"
@@ -324,10 +352,6 @@ runs:
                 exit "$overall_exit_code"
               fi
             else
-              if [ "$run_count" -gt 1 ]; then
-                echo "Running $run_count Microsoft.Testing.Platform project/target-framework invocation(s) sequentially because build and/or restore are enabled."
-              fi
-
               project_index=0
               while [ "$project_index" -lt "$run_count" ]; do
                 file="${project_files[$project_index]}"
