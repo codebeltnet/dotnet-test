@@ -80,10 +80,15 @@ forwarded as `--hangdump-timeout` and `--hangdump-type`. .NET Framework runs use
 can differ from VSTest's blame behavior.
 
 With `projects` specified, the action evaluates each project's target frameworks
-and runs `dotnet test --project --framework` for each one. It honors the `build`,
-`restore`, and `build-switches` inputs on every target. Coverlet coverage is
-requested for supported modern .NET targets and `net48`; other .NET Framework
-targets still run and produce TRX without Coverlet coverage. With `projects` empty, MTP runs
+and keeps per-framework `dotnet test --project --framework` invocations so every
+run can write to `<results-directory>/<tfm>/<project-name>/` without TRX or
+OpenCover collisions. When more than one resolved project/target-framework run
+exists and both `build` and `restore` are `false`, those invocations are
+launched concurrently and all child processes are awaited before the action
+exits; otherwise they remain sequential so the action does not race shared build
+state. Coverlet coverage is requested for supported modern .NET targets and
+`net48`; other .NET Framework targets still run and produce TRX without
+Coverlet coverage. With `projects` empty, MTP runs
 already-built `*Tests.dll` modules under `bin/<configuration>/net*.0/` and
 `*Tests.exe` modules under `bin/<configuration>/net4*/`. That module-discovery
 path does not apply `build`, `restore`, or `build-switches`; callers must prepare
@@ -98,9 +103,12 @@ written under `runner.temp/<test-results-folder-name>`; callers own report
 publishing.
 
 Run the deterministic runner and argument contract checks with
-`pwsh -NoProfile -File tests/Test-ActionContract.ps1`. Run the VSTest collector
-smoke test with `pwsh -NoProfile -File tests/Test-VSTestCompatibility.ps1`; it
-restores a temporary test project and checks for TRX and non-empty OpenCover.
+`pwsh -NoProfile -File tests/Test-ActionContract.ps1`. Run the explicit-project
+MTP concurrency contract checks with
+`pwsh -NoProfile -File tests/Test-MtpProjectExecution.ps1`. Run the VSTest
+collector smoke test with
+`pwsh -NoProfile -File tests/Test-VSTestCompatibility.ps1`; it restores a
+temporary test project and checks for TRX and non-empty OpenCover.
 
 ## Examples
 
