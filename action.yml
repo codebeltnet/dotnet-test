@@ -269,7 +269,9 @@ runs:
               while [ "$project_index" -lt "$run_count" ]; do
                 file="${project_files[$project_index]}"
                 already_prepared=false
-                for prepared_file in "${prepared_projects[@]}"; do
+                # Bash 3.2 (Apple) treats an empty array expansion as unbound under
+                # `set -u`, so guard the expansion to keep macOS runners working.
+                for prepared_file in "${prepared_projects[@]+"${prepared_projects[@]}"}"; do
                   if [ "$prepared_file" = "$file" ]; then
                     already_prepared=true
                     break
